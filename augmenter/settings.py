@@ -94,6 +94,18 @@ DATABASES = {
     }
 }
 
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql_psycopg2",
+        "NAME": "augementer_db",
+        "USER": "augmenter",
+        "PASSWORD": "pass321",
+        "HOST": "ec2-23-23-164-251.compute-1.amazonaws.com",
+        "PORT": "5432",
+    }
+}
+
+
 db_from_env = dj_database_url.config()
 DATABASES['default'].update(db_from_env)
 

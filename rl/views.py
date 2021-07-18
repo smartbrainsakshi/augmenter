@@ -2,6 +2,7 @@
 from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
 from .forms import *
+from django.db import transaction
 import nlpaug
 import random
 import string
@@ -10,7 +11,8 @@ import nlpaug.augmenter.char as nac
 import nltk
 from textaugment import EDA, Wordnet
 import emoji
-
+from .models import Parent, Positive, Negative
+import decimal
 
 positive_options = [
     "Random word swap",
@@ -32,7 +34,7 @@ negative_options = [
     "Sentence insertion",
 ]
 
-# form view
+@transaction.atomic
 def my_form_post(request):
     if request.method == 'POST':
         text = request.POST.get('text')
@@ -40,12 +42,21 @@ def my_form_post(request):
         pos_logics = request.POST.getlist('pos-logic')
         neg_logics = request.POST.getlist('neg-logic')
 
+        # parent for the input text
+        parent, _ = Parent.objects.get_or_create(sentence=text)
+
         if pos_logics:
             t = EDA()
+            last_positive = Positive.objects.filter(parent_id=parent.id).last()
+            counter = round(last_positive.positive_id, 1) if last_positive else 1.0
+            new_records = []
 
             for logic in pos_logics:
                 logic_res = apply_pos_logic(logic, text, t)
+                counter+=decimal.Decimal(0.1)
+                new_records.append(Positive(sentence=logic_res, parent_id=parent.id, positive_id=counter))
                 result.append([logic, logic_res])
+            Positive.objects.bulk_create(new_records)
 
         elif neg_logics:
             t = EDA()
@@ -53,9 +64,17 @@ def my_form_post(request):
             half_txt = " ".join(words[:int(len(words) / 2)])
             rem_txt = " ".join(words[int(len(words) / 2):])
             n = int(len(words) / 2)
+            
+            last_negative = Negative.objects.filter(parent_id=parent.id).last()
+            counter = round(last_negative.negative_id, 1) if last_negative else 1.0
+            new_records = []
             for logic in neg_logics:
-                result.append(evaluate_negative_augmentation(text, logic, t, half_txt, rem_txt, n, words))
-        print(result)
+                logic_res = evaluate_negative_augmentation(text, logic, t, half_txt, rem_txt, n, words)
+                if logic_res:
+                    counter+=0.1
+                    new_records.append(Negative(sentence=logic_res, parent_id=parent.id, negative_id=counter))
+                    result.append([logic, logic_res])
+            Negative.objects.bulk_create(new_records)
 
         return render(request, 'index.html', {"input_text":text, "result":result, "positive_options": positive_options, "negative_options": negative_options})
     return render(request, 'index.html', {"input_text":"", "result":[], "positive_options": positive_options, "negative_options": negative_options})
@@ -66,26 +85,26 @@ def my_form_post(request):
 def evaluate_negative_augmentation(text, neg_logic, t, half_txt, rem_txt, n, words):
     # 0. replace with emojis
     if neg_logic == "Text to emoji":
-        return ["Text to emoji", text_to_emoji(text)]
+        return text_to_emoji(text)
     # 1. make antonym of whole text
     elif neg_logic == "Antonym of text":
-        return ["Antonym of text", naw.AntonymAug().augment(text, n=1)]
+        return naw.AntonymAug().augment(text, n=1)
     # 2. insert n words in the half sentence, where n = half of size of sentence
     elif neg_logic == "Insert sentence":
         try:
             rand_index = random.randint(0, n)
-            return ["Insert sentence", t.random_insertion(sentence=words[rand_index], n=n) + " " + rem_txt]
+            return t.random_insertion(sentence=words[rand_index], n=n) + " " + rem_txt
         except:
             pass
     # 3. make antonym of whole text and insert a special character at any position
     elif neg_logic == "Special character insertion":
-        return ["Special character insertion", get_with_special_char(text)]
+        return get_with_special_char(text)
     # 4. swap half of the sentence
     elif neg_logic == "Swap in the sentence":
-        return ["Swap in the sentence", t.random_swap(half_txt) + " " + rem_txt]
+        return t.random_swap(half_txt) + " " + rem_txt
     # 5. insert one random word in half text
     elif neg_logic == "Sentence insertion":
-        return ["Sentence insertion", t.random_insertion(half_txt) + " " + rem_txt]
+        return t.random_insertion(half_txt) + " " + rem_txt
 
 
 def get_with_special_char(text):
