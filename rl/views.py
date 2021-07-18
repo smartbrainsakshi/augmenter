@@ -53,7 +53,7 @@ def my_form_post(request):
 
             for logic in pos_logics:
                 logic_res = apply_pos_logic(logic, text, t)
-                counter+=decimal.Decimal(0.1)
+                counter+=0.1
                 new_records.append(Positive(sentence=logic_res, parent_id=parent.id, positive_id=counter))
                 result.append([logic, logic_res])
             Positive.objects.bulk_create(new_records)

@@ -100,7 +100,7 @@ DATABASES = {
         "NAME": "augementer_db",
         "USER": "augmenter",
         "PASSWORD": "pass321",
-        "HOST": "ec2-23-23-164-251.compute-1.amazonaws.com",
+        "HOST": "localhost",
         "PORT": "5432",
     }
 }
